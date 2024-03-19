@@ -1,37 +1,27 @@
-# Script VPN connection error handler by EdkiyGluk
+# Script of VPN connection error handler
+# Script uses ideas by EdkiyGluk
+# https://github.com/drpioneer/MikrotikCheckVPN/blob/main/vpn.rsc
 # http://forummikrotik.ru/viewtopic.php?f=14&t=6258
-# tested on ROS 6.48.3
-# updated 2021/06/24
+# tested on ROS 6.49.10
+# updated 2024/03/19
 
 :do {
-    :local nameVPN      "VPN";
-    :local countPing    3;
-    :local message      "Getting start the script of VPN connection error handler.\r\n";
-    if ([ /interface find name~$nameVPN; ] != "") do={
-        /interface set [ /interface find name~$nameVPN disabled=yes; ] disabled=no;
-        :foreach activeVPN in=[ /ip address find interface~$nameVPN; ] do={
-            :do {
-                :local remoteAddress [ /ip address get $activeVPN network; ];
-                :local localAddress  [ :pick [ /ip address get $activeVPN address; ] 0 ([ :len [ /ip address get $activeVPN address; ]] - 3)];
-                :local interfaceVPN  [ /ip address get $activeVPN interface; ];
-                :local checkPing     [ /ping $remoteAddress src-address=$localAddress count=$countPing; ];
-                :if (($checkPing * 10) < ($countPing * 10 / 4)) do={
-                    /interface disable $interfaceVPN;
-                    delay delay-time=3s;
-                    /interface enable $interfaceVPN;
-                    :log info             ("VPN interface $interfaceVPN reactivated.");
-                    :set message ("$message VPN interface $interfaceVPN reactivated.\r\n");
-                } else={
-                    :set message ("$message VPN interface $interfaceVPN is working.\r\n");
-                }
-            } on-error={
-                :log warning          ("Script error. Working VPN interface not found.");
-                :set message ("$message Script error. Working VPN interface not found.");
-            }
-        }
-    } else={ 
-        :log warning          ("VPN interface '$nameVPN' not found."); 
-        :set message ("$message VPN interface '".$nameVPN."' not found.\r\n"); 
-    }
-    :put ($message."Termination of the VPN connection error handler."); 
+  :local nameVPN "VPN"; :local cntPing 3; :local msg "";
+  :put "Start of VPN connection error handler script on router: $[/system identity get name]";
+  :if ([/interface find name~$nameVPN]!="") do={
+    /interface set [find name~$nameVPN disabled=yes] disabled=no; /delay delay-time=7s;
+    /ip address;
+    :foreach actVPN in=[find interface~$nameVPN] do={
+      :do {
+        :local ifcVPN [get $actVPN interface]; :local adrVPN [get $actVPN address];
+        :local netVPN [get $actVPN network]; :local locAdr [:pick $adrVPN 0 [:find $adrVPN "/"]];
+        :local chkPng [/ping $netVPN src-address=$locAdr count=$cntPing];
+        :if (($chkPng*10)<($cntPing*10>>2)) do={
+          /interface disable $ifcVPN; /delay delay-time=3s; /interface enable $ifcVPN;
+          :set msg "$msg\r\n>>> $ifcVPN reactivated"; /log info ">>> $ifcVPN reactivated";
+        } else={:set msg "$msg\r\n>>> $ifcVPN ($locAdr<->$netVPN) is connected"}
+      } on-error={
+        :set msg "$msg\r\nError, working VPN not found"; /log warning "Error, working VPN not found"}}
+  } else={:set msg "$msg\r\nVPN '$nameVPN' not found"; /log warning "VPN '$nameVPN' not found"}
+  :put $msg; 
 }
